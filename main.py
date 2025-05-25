@@ -1,3 +1,5 @@
+import threading
+from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder, CommandHandler,
@@ -8,11 +10,20 @@ from telegram.ext import (
 BOT_TOKEN = "7006467443:AAFNVxqnP4mKsnGkdehqH7jecPXWwkctbtI"
 SUPPORT_GROUP_ID = -1002288022061
 
-# /start
+# Flask веб-сервер для Render
+app_web = Flask(__name__)
+
+@app_web.route('/')
+def home():
+    return "✅ Бот працює!"
+
+def run_web():
+    app_web.run(host='0.0.0.0', port=8080)
+
+# --- Telegram bot ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("👋 Привіт! Введіть своє питання — ми надішлемо його в техпідтримку.")
 
-# Повідомлення від користувача
 async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     message = update.message.text
@@ -28,7 +39,6 @@ async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE
     ])
     await update.message.reply_text("✅ Ваше повідомлення надіслано. Очікуйте відповідь.", reply_markup=keyboard)
 
-# Відповідь саппорту
 async def reply_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat.id != SUPPORT_GROUP_ID:
         await update.message.reply_text("❌ Ця команда працює тільки в групі підтримки.")
@@ -47,7 +57,6 @@ async def reply_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"❌ Помилка: {e}")
 
-# Обробка callback кнопок
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -67,13 +76,17 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         await query.message.reply_text("🙏 Дякуємо за вашу оцінку!")
 
-# Запуск бота
-app = ApplicationBuilder().token(BOT_TOKEN).build()
+# --- RUN ALL ---
+def run_bot():
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("reply", reply_command))
+    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_user_message))
+    app.add_handler(CallbackQueryHandler(handle_callback))
+    print("✅ Бот запущено")
+    app.run_polling()
 
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("reply", reply_command))
-app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_user_message))
-app.add_handler(CallbackQueryHandler(handle_callback))
-
-print("✅ Бот запущено")
-app.run_polling()
+# Запуск Flask + Telegram одночасно
+if __name__ == "__main__":
+    threading.Thread(target=run_web).start()
+    run_bot()
